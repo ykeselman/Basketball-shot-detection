@@ -6,19 +6,17 @@ import cvzone
 import math
 import numpy as np
 from utils import score, detect_down, detect_up, in_hoop_region, clean_hoop_pos, clean_ball_pos
+import argparse
 
 
 class ShotDetector:
-    def __init__(self):
+    def __init__(self, model: str, video: str):
         # Load the YOLO model created from main.py - change text to your relative path
-        self.model = YOLO("best.pt")
-        self.class_names = ['Basketball', 'Basketball Hoop']
-
-        # Uncomment line below to use webcam (I streamed to my iPhone using Iriun Webcam)
-        # self.cap = cv2.VideoCapture(0)
+        self.model = YOLO(model)
+        self.class_names = ['Basketball', 'Hoop']
 
         # Use video - replace text with your video path
-        self.cap = cv2.VideoCapture("video_test_5.mp4")
+        self.cap = cv2.VideoCapture(video)
 
         self.ball_pos = []  # array of tuples ((x_pos, y_pos), frame count, width, height, conf)
         self.hoop_pos = []  # array of tuples ((x_pos, y_pos), frame count, width, height, conf)
@@ -43,18 +41,23 @@ class ShotDetector:
         self.run()
 
     def run(self):
-        while True:
+        i = 0
+        while i < 2000 and True:
+            i += 1
             ret, self.frame = self.cap.read()
 
             if not ret:
                 # End of the video or an error occurred
                 break
 
+            x = input()
+
             results = self.model(self.frame, stream=True)
 
             for r in results:
                 boxes = r.boxes
                 for box in boxes:
+                    print(i, 'box', box)
                     # Bounding box
                     x1, y1, x2, y2 = box.xyxy[0]
                     x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
@@ -65,17 +68,21 @@ class ShotDetector:
 
                     # Class Name
                     cls = int(box.cls[0])
+                    if cls > len(self.class_names):
+                        print("GOT UNKNOWN", cls)
+                        continue
                     current_class = self.class_names[cls]
+                    print("current class", current_class, "confidence", conf)
 
                     center = (int(x1 + w / 2), int(y1 + h / 2))
 
                     # Only create ball points if high confidence or near hoop
-                    if (conf > .3 or (in_hoop_region(center, self.hoop_pos) and conf > 0.15)) and current_class == "Basketball":
+                    if (conf > .1 or (in_hoop_region(center, self.hoop_pos) and conf > 0.15)) and current_class == "Basketball":
                         self.ball_pos.append((center, self.frame_count, w, h, conf))
                         cvzone.cornerRect(self.frame, (x1, y1, w, h))
 
                     # Create hoop points if high confidence
-                    if conf > .5 and current_class == "Basketball Hoop":
+                    if conf > .5 and current_class == "Hoop":
                         self.hoop_pos.append((center, self.frame_count, w, h, conf))
                         cvzone.cornerRect(self.frame, (x1, y1, w, h))
 
@@ -149,5 +156,14 @@ class ShotDetector:
 
 
 if __name__ == "__main__":
-    ShotDetector()
+    parser = argparse.ArgumentParser()
+    # model_location = '/home/yakov/Pedanteq/tracking/Basketball-shot-detection/runs/detect/train2/weights/best.pt'
+    # model_location = 'best-small.pt'
+    # model_location = 'best-medium.pt'
+    model_location = 'another-medium.pt'
+    parser.add_argument('--video', default='../Videos/game2_052.mp4')
+    parser.add_argument('--model', default=model_location)
 
+    args = parser.parse_args()
+    print(args)
+    ShotDetector(model=args.model, video=args.video)
